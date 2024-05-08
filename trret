@@ -1,0 +1,751 @@
+using System;
+using System.Data;
+using System.Data.Odbc;
+
+namespace working_with_database_1_0
+{
+    class Program
+    {
+        private static string connectionString = "DSN=PostgreSQL35W";
+        private static string tableName = "";
+        private static string Username = "";
+
+        static void Main(string[] args)
+        {
+
+            try
+            {  
+                Console.WriteLine("Connecting to the database...");
+                LoadTables();
+
+                while (true)
+                {
+                    Console.WriteLine("Choose an option:");
+                    Console.WriteLine("1. Refresh data");
+                    Console.WriteLine("2. Create record");
+                    Console.WriteLine("3. Delete record");
+                    Console.WriteLine("4. Show information from the table");
+                    Console.WriteLine("5. Get stored procedures");
+
+                    string option = Console.ReadLine();
+
+                    switch (option)
+                    {
+                        case "1":
+                            RefreshData();
+                            break;
+                        case "2":
+                            Console.WriteLine("Enter tablename:");
+                            tableName = Console.ReadLine();
+                            CreateRecord(tableName);
+                            break;
+                        case "3":
+                            Console.WriteLine("Enter tablename:");
+                            tableName = Console.ReadLine();
+                            DeleteRecordCascade(tableName);
+                            break;
+                        case "4":
+                            Console.WriteLine("Enter tablename:");
+                            tableName = Console.ReadLine();
+                            LoadDataFromTable(tableName);
+                            break;
+                        case "5":
+                            GetStoredProcedures();
+                            break;
+                        default:
+                            Console.WriteLine("Invalid option. Please try again.");
+                            break;
+                    }
+
+                }
+
+            }
+            catch (OdbcException ex)
+            {
+                LogMessage("Error connecting to the database: " + ex.Message);
+            }
+        }
+
+        // Обновление данных
+        private static void RefreshData()
+        {
+            // Проверяем, выбрана ли какая-то таблица для обновления данных
+            if (!string.IsNullOrWhiteSpace(tableName))
+            {
+                // Если таблица выбрана, вызываем метод LoadDataFromTable для загрузки данных из выбранной таблицы
+                LoadDataFromTable(tableName);
+            }
+            else
+            {
+                // Если таблица не выбрана, записываем ошибку в журнал сообщений
+                LogMessage("Error: No table selected.");
+            }
+        }
+
+
+        // Загрузка списка таблиц из базы данных
+        private static void LoadTables()
+        {
+            try
+            {
+                // Подключаемся к базе данных с помощью OdbcConnection
+                using (OdbcConnection conn = new OdbcConnection(connectionString))
+                {
+                    conn.Open(); // Открываем соединение с базой данных
+                                 // Формируем SQL-запрос для получения списка таблиц из схемы, исключая системные таблицы
+                    string query = "SELECT table_name FROM information_schema.tables " +
+                    "WHERE table_schema NOT IN('information_schema','pg_catalog'); ";
+                    // Создаем команду для выполнения запроса
+                    OdbcCommand command = new OdbcCommand(query, conn);
+                    // Выполняем запрос и получаем результаты в виде объекта OdbcDataReader
+                    OdbcDataReader reader = command.ExecuteReader();
+
+                    // Читаем результаты запроса и выводим имена таблиц в консоль
+                    while (reader.Read()) 
+                    {
+                        string table = reader.GetString(0);
+                        Console.WriteLine(table);
+                    }
+                }
+            }
+            catch (OdbcException ex)
+            {
+                // Если произошла ошибка типа OdbcException, выбрасываем исключение дальше
+                throw ex;
+            }
+            catch (Exception ex)
+            {
+                // Если произошла другая ошибка, записываем сообщение об ошибке в журнал сообщений
+                LogMessage("Error: " + ex.Message);
+            }
+        }
+
+        // Загрузка данных из таблицы
+        private static void LoadDataFromTable(string tableName)
+        {
+            try
+            {
+                // Устанавливаем соединение с базой данных с помощью объекта OdbcConnection
+                using (OdbcConnection conn = new OdbcConnection(connectionString))
+                {
+                    conn.Open(); // Открываем соединение с базой данных
+                    LogMessage("Connection established successfully."); // Записываем сообщение о успешном установлении соединения в журнал сообщений
+
+                    // Формируем SQL-запрос для выборки всех данных из указанной таблицы
+                    string query = "SELECT * FROM " + tableName;
+                    // Создаем объект команды для выполнения запроса
+                    OdbcCommand command = new OdbcCommand(query, conn);
+                    // Выполняем запрос и получаем результаты в виде объекта OdbcDataReader
+                    OdbcDataReader reader = command.ExecuteReader();
+
+                    // Выводим заголовки столбцов
+                    for (int i = 0; i < reader.FieldCount; i++)
+                    {
+                        string columnName = reader.GetName(i);
+                        Console.Write(columnName.PadRight(20)); // Выводим имя столбца с выравниванием по правому краю и дополняем пробелами до длины 20 символов
+                    }
+                    Console.WriteLine(); // Переходим на новую строку после вывода заголовков столбцов
+
+                    // Выводим разделительную линию
+                    for (int i = 0; i < reader.FieldCount; i++)
+                    {
+                        Console.Write("".PadRight(20, '-')); // Выводим линию, состоящую из символов "-", длиной 20 символов
+                    }
+                    Console.WriteLine(); // Переходим на новую строку после вывода разделительной линии
+
+                    // Выводим данные из таблицы
+                    while (reader.Read())
+                    {
+                        for (int i = 0; i < reader.FieldCount; i++)
+                        {
+                            Console.Write(reader[i].ToString().PadRight(20)); // Выводим значение ячейки с выравниванием по правому краю и дополняем пробелами до длины 20 символов
+                        }
+                        Console.WriteLine(); // Переходим на новую строку после вывода данных для одной строки таблицы
+                    }
+
+                    LogMessage("Data loaded successfully from table: " + tableName); // Записываем сообщение об успешной загрузке данных из таблицы в журнал сообщений
+                }
+            }
+            catch (Exception ex)
+            {
+                // Если произошла ошибка, записываем сообщение об ошибке в журнал сообщений
+                LogMessage("Error: " + ex.Message);
+            }
+        }
+
+        // Журналирование сообщения
+        private static void LogMessage(string message)
+        {
+            Console.WriteLine(message); // Выводим сообщение в консоль
+        }
+
+
+        // Создание записи в таблице
+        private static void CreateRecord(string tableName)
+        {
+            try
+            {
+                // Получаем все столбцы из указанной таблицы
+                string[] columns = GetAllColumnsFromTable(tableName);
+                // Создаем словарь для хранения значений столбцов
+                Dictionary<string, string> values = new Dictionary<string, string>();
+                // Просим пользователя ввести значение для каждого столбца
+                foreach (string column in columns)
+                {
+                    string value = GetInputWithMaxLength($"Enter {column}:", 15); // Запрашиваем ввод значения от пользователя
+                    values.Add(column, value); // Добавляем значение в словарь
+                }
+
+                // Устанавливаем соединение с базой данных с помощью объекта OdbcConnection
+                using (OdbcConnection conn = new OdbcConnection(connectionString))
+                {
+                    conn.Open(); // Открываем соединение с базой данных
+                    LogMessage("Connection established successfully."); // Записываем сообщение о успешном установлении соединения в журнал сообщений
+
+                    // Формируем SQL-запрос для вставки записи в таблицу
+                    string query = $"INSERT INTO {tableName} ({string.Join(", ", values.Keys)}) " +
+                                   $"VALUES ({string.Join(", ", values.Keys.Select(k => $"?"))})";
+                    // Создаем объект команды для выполнения запроса
+                    OdbcCommand command = new OdbcCommand(query, conn);
+                    // Добавляем параметры к команде для каждого значения из словаря
+                    foreach (var pair in values)
+                    {
+                        command.Parameters.AddWithValue($"@{pair.Key}", pair.Value);
+                    }
+
+                    // Выполняем запрос на вставку записи и получаем количество измененных строк
+                    int rowsAffected = command.ExecuteNonQuery();
+
+                    // Проверяем, была ли успешно создана запись
+                    if (rowsAffected > 0)
+                    {
+                        LogMessage("Record created successfully."); // Записываем сообщение об успешном создании записи в журнал сообщений
+                        RefreshData(); // Обновляем данные для отображения последних изменений
+                    }
+                    else
+                    {
+                        LogMessage("Failed to create record."); // Записываем сообщение об ошибке создания записи в журнал сообщений
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // Если произошла ошибка, записываем сообщение об ошибке в журнал сообщений
+                LogMessage("Error: " + ex.Message);
+            }
+        }
+
+        // Проверяет наличие дочерних записей в связанных таблицах для определенной записи в базовой таблице.
+        private static bool HasChildRecords(string tableName, string primaryKeyColumnName, string primaryKeyValue)
+        {
+            // Получаем список дочерних таблиц для указанной базовой таблицы
+            List<string> childTables = GetChildTables(tableName);
+
+            // Перебираем каждую дочернюю таблицу
+            foreach (string childTable in childTables)
+            {
+                // Проверяем наличие записей в текущей дочерней таблице, соответствующих указанному первичному ключу
+                if (HasRecords(childTable, primaryKeyColumnName, primaryKeyValue))
+                {
+                    return true; // Если хотя бы в одной дочерней таблице найдены записи, возвращаем true
+                }
+            }
+
+            return false; // Если ни в одной дочерней таблице записи не найдены, возвращаем false
+        }
+
+
+        // Получает список дочерних таблиц для указанной таблицы
+        private static List<string> GetChildTables(string tableName)
+        {
+            // Создаем список для хранения имен дочерних таблиц
+            List<string> childTables = new List<string>();
+
+            try
+            {
+                // Устанавливаем соединение с базой данных с помощью объекта OdbcConnection
+                using (OdbcConnection conn = new OdbcConnection(connectionString))
+                {
+                    conn.Open(); // Открываем соединение с базой данных
+                    string query = @"
+                    SELECT tc.table_name
+                    FROM information_schema.table_constraints AS tc
+                    JOIN information_schema.constraint_column_usage AS ccu ON tc.constraint_name = ccu.constraint_name
+                    WHERE tc.constraint_type = 'FOREIGN KEY' AND ccu.table_name = ?"; // SQL-запрос для получения дочерних таблиц по внешним ключам
+                    // Создаем объект команды для выполнения запроса
+                    OdbcCommand command = new OdbcCommand(query, conn);
+                    // Добавляем параметр с именем таблицы для получения дочерних таблиц
+                    command.Parameters.AddWithValue("@table_name", tableName);
+                    // Выполняем запрос и получаем результаты в виде объекта OdbcDataReader
+                    OdbcDataReader reader = command.ExecuteReader();
+                    // Перебираем результаты запроса
+                    while (reader.Read())
+                    {
+                        // Получаем имя дочерней таблицы из результата запроса и добавляем его в список
+                        string childTable = reader.GetString(0);
+                        childTables.Add(childTable);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogMessage("Error: " + ex.Message); // Записываем сообщение об ошибке в журнал сообщений, если произошла ошибка
+            }
+
+            return childTables; // Возвращаем список дочерних таблиц
+        }
+
+
+        // Проверяет наличие записей в указанной таблице по заданному значению первичного ключа
+        private static bool HasRecords(string tableName, string primaryKeyColumnName, string primaryKeyValue)
+        {
+            try
+            {
+                // Устанавливаем соединение с базой данных с помощью объекта OdbcConnection
+                using (OdbcConnection conn = new OdbcConnection(connectionString))
+                {
+                    conn.Open(); // Открываем соединение с базой данных
+
+                    // SQL-запрос для подсчета числа записей в таблице, где значение первичного ключа равно заданному
+                    string query = $"SELECT COUNT(*) FROM {tableName} WHERE {primaryKeyColumnName} = ?";
+
+                    // Создаем объект команды для выполнения запроса
+                    OdbcCommand command = new OdbcCommand(query, conn);
+
+                    // Добавляем параметр с заданным значением первичного ключа
+                    command.Parameters.AddWithValue("@primaryKeyValue", primaryKeyValue);
+
+                    // Выполняем запрос и получаем результат в виде числа записей с заданным значением первичного ключа
+                    int count = Convert.ToInt32(command.ExecuteScalar());
+
+                    // Если количество записей больше нуля, возвращаем true, иначе false
+                    return count > 0;
+                }
+            }
+            catch (Exception ex)
+            {
+                // Записываем сообщение об ошибке в журнал сообщений, если произошла ошибка, и возвращаем false
+                LogMessage("Error: " + ex.Message);
+                return false;
+            }
+        }
+
+
+
+        // Удаляет запись из указанной таблицы в базе данных с учетом каскадного удаления связанных записей
+        private static void DeleteRecordCascade(string tableName)
+        {
+            try
+            {
+                // Получаем все столбцы таблицы
+                string[] columns = GetAllColumnsFromTable(tableName);
+
+                // Создаем словарь для хранения значений столбцов записи, которую нужно удалить
+                Dictionary<string, string> values = new Dictionary<string, string>();
+                foreach (string column in columns)
+                {
+                    // Получаем значение для каждого столбца от пользователя
+                    string value = GetInputWithMaxLength($"Enter {column} to delete:", 15);
+                    values.Add(column, value);
+                }
+
+                // Устанавливаем соединение с базой данных с помощью объекта OdbcConnection
+                using (OdbcConnection conn = new OdbcConnection(connectionString))
+                {
+                    conn.Open(); // Открываем соединение с базой данных
+                    LogMessage("Connection established successfully.");
+
+                    // Переменная, которая указывает, есть ли у записи дочерние записи
+                    bool hasChildRecords = false;
+
+                    // Получаем значения первичного ключа записи, которую нужно удалить
+                    Dictionary<string, string> idValues = GetIdFromTable(tableName, values);
+
+                    // Проверяем, есть ли у удаляемой записи дочерние записи
+                    foreach (var entry in idValues)
+                    {
+                        string idColumnName = entry.Key;
+                        string idColumnValue = entry.Value;
+
+                        if (HasChildRecords(tableName, idColumnName, idColumnValue))
+                        {
+                            // Если есть дочерние записи, устанавливаем флаг в true и выходим из цикла
+                            hasChildRecords = true;
+                            break;
+                        }
+                    }
+
+                    // Если у записи есть дочерние записи, запрашиваем подтверждение пользователя для удаления
+                    if (hasChildRecords)
+                    {
+                        Console.WriteLine("Warning: This record has associated child records. Deleting it will also delete associated records.");
+                        Console.WriteLine("Do you want to proceed with the deletion? (yes/no)");
+                        string confirmation = Console.ReadLine();
+                        if (confirmation.ToLower() != "yes")
+                        {
+                            // Если пользователь отказывается от удаления, записываем сообщение и возвращаемся к основному меню
+                            LogMessage("Deletion canceled. Returning to the main menu.");
+                            return;
+                        }
+                    }
+
+                    // Формируем SQL-запрос для удаления записи из таблицы
+                    string query = $"DELETE FROM {tableName} WHERE {string.Join(" AND ", values.Select(pair => $"{pair.Key} = ?"))}";
+                    // Создаем объект команды для выполнения SQL-запроса
+                    OdbcCommand command = new OdbcCommand(query, conn);
+                    foreach (var pair in values)
+                    {
+                        // Добавляем параметры в команду для предотвращения SQL-инъекций
+                        command.Parameters.AddWithValue($"@{pair.Key}", pair.Value);
+                    }
+
+                    // Выполняем SQL-запрос на удаление записи
+                    int rowsAffected = command.ExecuteNonQuery();
+
+                    // Если удаление прошло успешно, записываем сообщение и обновляем данные
+                    if (rowsAffected > 0)
+                    {
+                        LogMessage("Record deleted successfully.");
+                        RefreshData();
+                    }
+                    else
+                    {
+                        // Если не удалось удалить запись, записываем сообщение об ошибке
+                        LogMessage("Failed to delete record.");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // Если произошла ошибка, записываем сообщение об ошибке
+                LogMessage("Error: " + ex.Message);
+            }
+        }
+
+
+        // Получает ввод от пользователя с ограничением на максимальную длину строки
+        private static string GetInputWithMaxLength(string prompt, int maxLength)
+        {
+            while (true)
+            {
+                // Выводит приглашение для ввода
+                Console.WriteLine(prompt);
+                // Считывает ввод пользователя
+                string input = Console.ReadLine();
+
+                // Проверяет, была ли введена пустая строка или пробелы
+                if (string.IsNullOrWhiteSpace(input))
+                {
+                    // Если введена пустая строка или пробелы, выводит сообщение об ошибке и повторяет ввод
+                    Console.WriteLine("You entered nothing. Please, enter line again.");
+                    continue;
+                }
+
+                // Проверяет, не превышает ли длина введенной строки максимальную длину
+                if (input.Length <= maxLength)
+                {
+                    // Если введенная строка удовлетворяет ограничению на длину, возвращает ее
+                    return input;
+                }
+                else
+                {
+                    // Если введенная строка превышает максимальную длину, выводит сообщение об ошибке и повторяет ввод
+                    Console.WriteLine($"You entered more than {maxLength} characters. Please enter again.");
+                }
+            }
+        }
+
+
+
+        // Получает все столбцы из указанной таблицы
+        private static string[] GetAllColumnsFromTable(string tableName)
+        {
+            // Создаем список для хранения имен столбцов
+            List<string> columns = new List<string>();
+
+            try
+            {
+                // Устанавливаем соединение с базой данных с помощью объекта OdbcConnection
+                using (OdbcConnection conn = new OdbcConnection(connectionString))
+                {
+                    conn.Open(); // Открываем соединение с базой данных
+                                 // Определяем имя таблицы без последней буквы
+                    string tableNameWithoutLastLetter = tableName.Substring(0, tableName.Length - 1);
+                    // Формируем SQL-запрос для получения имен столбцов из информационной схемы
+                    string query = "SELECT column_name FROM INFORMATION_SCHEMA.Columns WHERE " +
+                        "table_schema = 'public' AND table_name = ? " +
+                        $"AND column_name != '{tableNameWithoutLastLetter + '_'}id' " +
+                        "ORDER BY ordinal_Position; ";
+                    // Создаем объект команды для выполнения запроса
+                    OdbcCommand command = new OdbcCommand(query, conn);
+                    // Добавляем параметр с именем таблицы для получения столбцов
+                    command.Parameters.AddWithValue("@table_name", tableName);
+
+                    // Выполняем запрос и получаем результаты в виде объекта OdbcDataReader
+                    using (OdbcDataReader reader = command.ExecuteReader())
+                    {
+                        // Перебираем результаты запроса
+                        while (reader.Read)
+
+                        // Получает список хранимых процедур из базы данных и предоставляет пользователю возможность выбрать одну из них для вызова
+                        private static void GetStoredProcedures()
+                        {
+                            try
+                            {
+                                // Устанавливаем соединение с базой данных
+                                using (OdbcConnection conn = new OdbcConnection(connectionString))
+                                {
+                                    conn.Open(); // Открываем соединение
+                                    LogMessage("Connection established successfully."); // Записываем сообщение о успешном установлении соединения
+
+                                    // Формируем SQL-запрос для получения списка хранимых процедур
+                                    string query = "SELECT routine_name FROM information_schema.routines " +
+                                                   "WHERE routine_type = 'PROCEDURE'";
+                                    // Создаем объект команды для выполнения запроса
+                                    OdbcCommand command = new OdbcCommand(query, conn);
+                                    // Выполняем запрос и получаем результаты в виде объекта OdbcDataReader
+                                    OdbcDataReader reader = command.ExecuteReader();
+
+                                    // Выводим список хранимых процедур на консоль
+                                    Console.WriteLine("Stored Procedures:");
+                                    List<string> procedures = new List<string>();
+                                    while (reader.Read())
+                                    {
+                                        string procedureName = reader.GetString(0);
+                                        procedures.Add(procedureName);
+                                        Console.WriteLine($"{procedures.Count}. {procedureName}");
+                                    }
+                                    // Записываем сообщение об успешном выводе списка хранимых процедур
+                                    LogMessage("Stored procedures listed successfully.");
+
+                                    // Запрашиваем у пользователя номер процедуры для вызова
+                                    Console.WriteLine("Enter the number of the procedure to call:");
+                                    if (int.TryParse(Console.ReadLine(), out int selectedProcedureNumber))
+                                    {
+                                        if (selectedProcedureNumber > 0 && selectedProcedureNumber <= procedures.Count)
+                                        {
+                                            // Получаем имя выбранной процедуры
+                                            string procedureName = procedures[selectedProcedureNumber - 1];
+                                            // Вызываем выбранную процедуру
+                                            CallStoredProcedure(procedureName);
+                                        }
+                                        else
+                                        {
+                                            Console.WriteLine("Invalid procedure number."); // Выводим сообщение об ошибке в случае неверного номера процедуры
+                                        }
+                                    }
+                                    else
+                                    {
+                                        Console.WriteLine("Invalid input. Please enter a valid number."); // Выводим сообщение об ошибке в случае некорректного ввода
+                                    }
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                LogMessage("Error: " + ex.Message); // Записываем сообщение об ошибке в журнал сообщений, если произошла ошибка
+                            }
+                        }
+
+                        // Вызывает указанную хранимую процедуру с заданными параметрами
+                        private static void CallStoredProcedure(string procedureName)
+                        {
+                            try
+                            {
+                                // Устанавливаем соединение с базой данных
+                                using (OdbcConnection conn = new OdbcConnection(connectionString))
+                                {
+                                    conn.Open(); // Открываем соединение
+                                    LogMessage("Connection established successfully."); // Записываем сообщение о успешном установлении соединения
+
+                                    // Получаем параметры хранимой процедуры
+                                    DataTable procedureParameters = GetStoredProcedureParameters(procedureName);
+
+                                    // Если хранимая процедура имеет параметры, запрашиваем у пользователя значения для них
+                                    if (procedureParameters.Rows.Count > 0)
+                                    {
+                                        Dictionary<string, string> parameterValues = new Dictionary<string, string>();
+                                        foreach (DataRow row in procedureParameters.Rows)
+                                        {
+                                            string parameterName = row["parameter_name"].ToString();
+                                            Console.WriteLine($"Enter value for parameter '{parameterName}':");
+                                            string parameterValue = Console.ReadLine();
+                                            parameterValues.Add(parameterName, parameterValue);
+                                        }
+
+                                        // Выполняем хранимую процедуру с заданными параметрами
+                                        ExecuteStoredProcedure(procedureName, parameterValues);
+                                    }
+                                    else
+                                    {
+                                        // Выполняем хранимую процедуру без параметров
+                                        ExecuteStoredProcedure(procedureName, null);
+                                    }
+
+                                    // Записываем сообщение об успешном выполнении хранимой процедуры
+                                    LogMessage($"Stored procedure '{procedureName}' executed successfully.");
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                LogMessage("Error: " + ex.Message); // Записываем сообщение об ошибке в журнал сообщений, если произошла ошибка
+                            }
+                        }
+
+                        // Получает параметры хранимой процедуры из базы данных
+                        private static DataTable GetStoredProcedureParameters(string procedureName)
+                        {
+                            DataTable parameters = new DataTable();
+                            try
+                            {
+                                // Устанавливаем соединение с базой данных
+                                using (OdbcConnection conn = new OdbcConnection(connectionString))
+                                {
+                                    conn.Open(); // Открываем соединение
+                                                 // Формируем SQL-запрос для получения параметров хранимой процедуры
+                                    string query = @"
+                SELECT 
+                    proname AS procedure_name,
+                    unnest(proargnames) AS parameter_name,
+                    unnest(proargtypes) AS parameter_type
+                FROM 
+                    pg_proc
+                WHERE 
+                    proname = ?";
+                                    // Создаем объект команды для выполнения запроса
+                                    OdbcCommand command = new OdbcCommand(query, conn);
+                                    // Добавляем параметр с именем процедуры для получения параметров
+                                    command.Parameters.AddWithValue("@proname", procedureName);
+                                    // Создаем адаптер данных для заполнения DataTable
+                                    OdbcDataAdapter adapter = new OdbcDataAdapter(command);
+                                    // Заполняем DataTable результатами запроса
+                                    adapter.Fill(parameters);
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                LogMessage("Error: " + ex.Message); // Записываем сообщение об ошибке в журнал сообщений, если произошла ошибка
+                            }
+                            return parameters; // Возвращаем DataTable с параметрами хранимой процедуры
+                        }
+
+                        // Выполняет хранимую процедуру с указанными параметрами
+                        private static void ExecuteStoredProcedure(string procedureName, Dictionary<string, string> parameterValues)
+                        {
+                            try
+                            {
+                                // Устанавливаем соединение с базой данных
+                                using (OdbcConnection conn = new OdbcConnection(connectionString))
+                                {
+                                    conn.Open(); // Открываем соединение
+                                    LogMessage("Connection established successfully."); // Записываем сообщение о успешном установлении соединения
+                                    string finalQuery = $"CALL {procedureName}"; // Формируем вызов хранимой процедуры
+
+                                    // Если есть параметры, добавляем их к вызову процедуры
+                                    if (parameterValues != null && parameterValues.Count > 0)
+                                    {
+                                        finalQuery += "(";
+                                        foreach (var parameter in parameterValues)
+                                        {
+                                            finalQuery += $"?,";
+                                        }
+                                        finalQuery = finalQuery.TrimEnd(',') + ")";
+                                    }
+
+                                    // Создаем объект команды для выполнения вызова процедуры
+                                    OdbcCommand command = new OdbcCommand(finalQuery, conn);
+                                    command.CommandType = CommandType.StoredProcedure;
+
+                                    // Добавляем параметры к команде, если они есть
+                                    if (parameterValues != null)
+                                    {
+                                        foreach (var parameter in parameterValues)
+                                        {
+                                            command.Parameters.AddWithValue($"@{parameter.Key}", parameter.Value);
+                                        }
+                                    }
+
+                                    // Выполняем вызов процедуры
+                                    command.ExecuteNonQuery();
+
+                                    // Записываем сообщение об успешном выполнении хранимой процедуры
+                                    LogMessage($"Stored procedure '{procedureName}' executed successfully.");
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                LogMessage("Error: " + ex.Message); // Записываем сообщение об ошибке в журнал сообщений, если произошла ошибка
+                            }
+                        }
+
+                        // Получает значение первичного ключа записи из указанной таблицы по данным записи
+                        private static Dictionary<string, string> GetIdFromTable(string tableName, Dictionary<string, string> recordData)
+                        {
+                            Dictionary<string, string> idColumnData = new Dictionary<string, string>();
+
+                            try
+                            {
+                                // Устанавливаем соединение с базой данных
+                                using (OdbcConnection conn = new OdbcConnection(connectionString))
+                                {
+                                    conn.Open(); // Открываем соединение
+                                                 // Формируем SQL-запрос для получения имени столбца первичного ключа из указанной таблицы
+                                    string query = "SELECT column_name FROM INFORMATION_SCHEMA.Columns WHERE " +
+                                        "table_schema = 'public' AND table_name = ? AND column_name LIKE '%_id'; ";
+
+                                    // Создаем объект команды для выполнения запроса
+                                    OdbcCommand command = new OdbcCommand(query, conn);
+                                    // Добавляем параметр с именем таблицы для получения имени столбца первичного ключа
+                                    command.Parameters.AddWithValue("@table_name", tableName);
+
+                                    // Выполняем запрос и получаем результаты в виде объекта OdbcDataReader
+                                    using (OdbcDataReader reader = command.ExecuteReader())
+                                    {
+                                        // Если есть результаты запроса
+                                        if (reader.Read())
+                                        {
+                                            string idColumnName = reader.GetString(0);
+
+                                            string whereClause = "";
+                                            foreach (var pair in recordData)
+                                            {
+                                                whereClause += $"{pair.Key} = ? AND ";
+                                            }
+                                            whereClause = whereClause.TrimEnd(' ', 'A', 'N', 'D', ' ');
+
+                                            // Формируем SQL-запрос для получения значения первичного ключа записи
+                                            string queryForIdValue = $"SELECT {idColumnName} FROM {tableName} WHERE {whereClause}";
+                                            // Создаем команду для выполнения запроса
+                                            OdbcCommand commandForIdValue = new OdbcCommand(queryForIdValue, conn);
+                                            // Добавляем параметры для условия WHERE
+                                            foreach (var pair in recordData)
+                                            {
+                                                commandForIdValue.Parameters.AddWithValue($"@{pair.Key}", pair.Value);
+                                            }
+
+                                            // Выполняем запрос и получаем результаты в виде объекта OdbcDataReader
+                                            using (OdbcDataReader readerForIdValue = commandForIdValue.ExecuteReader())
+                                            {
+                                                // Если есть результаты запроса
+                                                if (readerForIdValue.Read())
+                                                {
+                                                    // Получаем значение первичного ключа и добавляем его в словарь
+                                                    string idColumnValue = readerForIdValue.GetValue(0).ToString();
+                                                    idColumnData.Add(idColumnName, idColumnValue);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                LogMessage("Error: " + ex.Message); // Записываем сообщение об ошибке в журнал сообщений, если произошла ошибка
+                            }
+
+                            return idColumnData; // Возвращаем словарь с данными столбца первичного ключа
+                        }
+
+
+                    }
+                }
+            }
